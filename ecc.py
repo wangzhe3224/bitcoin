@@ -7,6 +7,44 @@ from unittest import TestSuite, TextTestRunner
 import hashlib
 import hmac
 
+mysecret = 1234567890
+BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+def encode_base58(s):
+    # find leading 0's
+    count = 0
+    for c in s:
+        if c == 0:
+            count =+ 1
+        else:
+            break
+        
+    num = int.from_bytes(s, 'big')
+    prefix = '1' * count 
+    result = ''
+    while num > 0:
+        num, mod = divmod(num, 58)
+        result = BASE58_ALPHABET[mod] + result
+    
+    return prefix + result
+
+def encode_base58_checksum(b):
+    return encode_base58(b + hash256(b)[:4])
+
+def hash160(s):
+    '''sha256 followed by ripemd160'''
+    return hashlib.new('ripemd160', hashlib.sha256(s).digest()).digest()  # <1>
+
+def decode_base58(s):
+    num = 0
+    for c in s:
+        num *= 58
+        num += BASE58_ALPHABET.index(c)
+    combined = num.to_bytes(25, byteorder='big')
+    checksum = combined[-4:]
+    if hash256(combined[:-4])[:4] != checksum:
+        raise ValueError('bad address: {} {}'.format(checksum, hash256(combined[:-4])[:4]))
+    return combined[1:-4]
 
 def hash256(s):
     return hashlib.sha256(hashlib.sha256(s).digest()).digest()
@@ -294,6 +332,9 @@ class S256Field(FieldElement):
     def __repr__(self):
         return '{:x}'.format(self.num).zfill(64)
 
+    def sqrt(self):
+        return self**((self.P + 1) // 4)
+
 
 class S256Point(Point):
     A = 0
@@ -317,7 +358,53 @@ class S256Point(Point):
         v = sig.r * s_inv % self.N 
         total = u * BITCOIN_G + v * self
         return total.x.num == sig.r
+    
+    def hash160(self, compressed=True):
+        return hash160(self.sec(compressed))
 
+    def address(self, compressed=True, testnet=False):
+        '''Returns the address string'''
+        h160 = self.hash160(compressed)
+        if testnet:
+            prefix = b'\x6f'
+        else:
+            prefix = b'\x00'
+        return encode_base58_checksum(prefix + h160)
+
+    def sec(self, compress=False):
+        '''returns the binary version of the SEC format'''
+        if compress:
+            if self.y.num % 2 == 0:
+                return b'\x02' + self.x.num.to_bytes(32, 'big')
+            else:
+                return b'\x03' + self.x.num.to_bytes(32, 'big')
+        else:
+            return b'\x04' + self.x.num.to_bytes(32, 'big') + self.y.num.to_byte(32, 'big')
+
+    def parse(self, sec_bin):
+        """ deserised """
+        if sec_bin[0] == 4: # uncompress
+            x = int.from_bytes(sec_bin[1:33], 'big') 
+            y = int.from_bytes(sec_bin[33:65], 'big') 
+            return S256Point(x=x, y=y)
+        
+        is_even = sec_bin[0] == 2
+        x = S256Field(int.from_bytes(sec_bin[1:], 'big'))
+        alpha = x**3 + S256Field(self.B)
+        beta = alpha.sqrt()
+        
+        if beta.num % 2 == 0:
+            even_beta = beta
+            odd_beta = S256Field(self.P - beta.num)
+        else:
+            even_beta = S256Field(P - beta.num)
+            odd_beta = beta 
+        
+        if is_even:
+            return S256Point(x, even_beta) 
+        else:
+            return S256Point(x, odd_beta)
+            
 
 class Signature:
     
@@ -327,6 +414,24 @@ class Signature:
         
     def __repr__(self) -> str:
         return f"Signature({self.r},{self.s})"
+
+    def der(self):
+        rbin = self.r.to_bytes(32, byteorder='big')
+        # remove all null bytes at the beginning 
+        rbin = rbin.lstrip(b'\x00')
+        # if rbin has a high bit, add a \x00
+        if rbin[0] & 0x80:
+            rbin = b'\x00' + rbin
+        result = bytes([2, len(rbin)]) + rbin
+        sbin = self.s.to_bytes(32, byteorder='big') 
+        # remove all null bytes at the beginning 
+        sbin = sbin.lstrip(b'\x00')
+        # if sbin has a high bit, add a \x00
+        if sbin[0] & 0x80:
+            sbin = b'\x00' + sbin
+        result += bytes([2, len(sbin)]) + sbin 
+
+        return bytes([0x30, len(result)]) + result
 
 BITCOIN_G = S256Point( 
     x=0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
@@ -373,6 +478,20 @@ class PrivateKey:
                 return candidate  # <2>
             k = hmac.new(k, v + b'\x00', s256).digest()
             v = hmac.new(k, v, s256).digest()
+
+    def wif(self, compressed=True, testnet=False): 
+        secret_bytes = self.secret.to_bytes(32, 'big') 
+        if testnet:
+            prefix = b'\xef' 
+        else:
+            prefix = b'\x80' 
+        
+        if compressed:
+            suffix = b'\x01' 
+        else:
+            suffix = b''
+
+        return encode_base58_checksum(prefix + secret_bytes + suffix)
 
 class PrivateKeyTest(TestCase):
 

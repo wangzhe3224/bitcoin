@@ -16,6 +16,11 @@ tags: Bitcoin
   - [签名过程](#签名过程)
   - [结论](#结论)
 - [序列化](#序列化)
+  - [SEC](#sec)
+  - [DER 签名](#der-签名)
+  - [Base58](#base58)
+  - [WIF 格式](#wif-格式)
+  - [如何操作？](#如何操作)
 
 比特币的核心是椭圆曲线加密技术，而明白这个加密技术，我们需要两个数学知识：有限域 和 椭圆曲线。
 
@@ -206,3 +211,71 @@ $$\mu G + vP = kG = (r, y)$$
 现在我们已经介绍了椭圆曲线密码学，以及如何签名和验证，下一步我们需要通过序列化和反序列化在网络上传输这些信息，在硬盘上存储这些信息。
 
 ## 序列化
+
+我们已经有了一些比特币的基本 Class，比如 `PrivateKey`, `S256Point`, `Signature`。我们需要高效在网络和硬盘上传输和存储这些数据。
+
+### SEC
+
+首先，是我们的公钥，`S256Point`，实际上我们需要传输的只有两个 256 位的整数，即坐标 `(x, y)`。
+
+非压缩的压缩方法可以是：
+
+1. 前缀：`0x04`
+2. x 坐标，32 byte, big endian
+3. y 坐标，32 byte, bit endian
+
+注意，定义在有限域的椭圆曲线上的点 $(x, y)$，当我们知道 $x$ 的值， $y$ 只有两种可能：$y$ 或者 $p-y$，
+我们知道 $p$ 是一个素数，所以也是一个奇数，因此如果 y 是奇数，则 p-y 就是偶数。所以，我们只需要序列化 x 和 y 奇偶性即可。
+
+这样，我们用 33 个字节就可以表达公钥 P 了。
+
+### DER 签名
+
+下一步，我们需要序列化签名，实际上就是 $(r, s)$，我们用到的方法是：Distinguished Encoding Rules (DER)。这也是 Satoshi 使用的序列化方法。
+
+### Base58
+
+想要交换比特币，我们需要提供公钥，无论是 Sec 还是压缩 Sec，我们需要 65 或者 33 字节。
+但是这样的地址（公钥）非常不易于人类读写，而且容易出错。比特币给出的方案是一个缩减版的 Base64 编码：Base58。
+去掉了一些容易混淆的字母，比如 I 和 1，,0 和 o 等等。
+
+真实的比特币地址使用了一种更加短的格式，hash160
+
+1. For mainnet addresses, start with the prefix 0x00, for testnet 0x6f.
+2. Take the SEC format (compressed or uncompressed) and do a sha256 operation followed by the ripemd160 hash operation, the combination of which is called a hash160 operation.
+3. Combine the prefix from #1 and resulting hash from #2.
+4. Do a hash256 of the result from #3 and get the first 4 bytes.
+5. Take the combination of #3 and #4 and encode it in Base58.
+
+``` text
+* 5002 (use uncompressed SEC on testnet)
+* 2020^5^ (use compressed SEC on testnet)
+* 0x12345deadbeef (use compressed SEC on mainnet)
+# end::exercise5[]
+# tag::answer5[]
+>>> from ecc import PrivateKey
+>>> priv = PrivateKey(5002)
+>>> print(priv.point.address(compressed=False, testnet=True))
+mmTPbXQFxboEtNRkwfh6K51jvdtHLxGeMA
+>>> priv = PrivateKey(2020**5)
+>>> print(priv.point.address(compressed=True, testnet=True))
+mopVkxp8UhXqRYbCYJsbeE1h1fiF64jcoH
+>>> priv = PrivateKey(0x12345deadbeef)
+>>> print(priv.point.address(compressed=True, testnet=False))
+1F1Pn2y6pDb68E5nYJJeba4TLg2U7B6KF1
+```
+
+### WIF 格式
+
+接下来，我们序列化我们的私钥，但是，通常我们不需要序列化私钥，因为我们不想经常暴露他们。。
+当然，有些情况我们需要序列化私钥，比如 Paper 钱包传到网上。
+
+Wallet Import Format (WIF).
+
+### 如何操作？
+
+``` text
+sec = 123456
+priv = PrivateKey(sec)
+address = priv.point.address(testnet=True)
+```
