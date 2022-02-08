@@ -21,6 +21,12 @@ tags: Bitcoin
   - [Base58](#base58)
   - [WIF 格式](#wif-格式)
   - [如何操作？](#如何操作)
+- [交易, Transaction](#交易-transaction)
+  - [输入](#输入)
+  - [输出](#输出)
+  - [UTXO](#utxo)
+  - [Locktime](#locktime)
+  - [交易费用](#交易费用)
 
 比特币的核心是椭圆曲线加密技术，而明白这个加密技术，我们需要两个数学知识：有限域 和 椭圆曲线。
 
@@ -279,3 +285,49 @@ sec = 123456
 priv = PrivateKey(sec)
 address = priv.point.address(testnet=True)
 ```
+
+## 交易, Transaction
+
+Transaction, Tx, 是比特币的核心，主要包括四个部分：
+
+- 版本，Version
+- 输入，Inputs
+- 输出，Outputs
+- 锁，Locktime
+
+![交易的具体信息](https://raw.githubusercontent.com/wangzhe3224/pic_repo/master/images/20220208192319.png)
+
+其中，locktime 被新的闪电网络取代了，因为存在安全隐患。
+
+### 输入
+
+每一笔交易的输入(inputs)都是前一个交易的输出（Output），每一个输入需要包含两个部分：
+
+- 你收到的比特币记录（reference）
+- 证明你可以支付这些比特币（ESDSA）
+
+技术上，每一个输入需要：
+
+- 前一笔交易的 ID （32 字节）， hash256 of the previous transaction’s contents.
+- 前一笔交易的 Index（4 字节），
+- ScriptSig
+- Sequence
+
+### 输出
+
+输出中也可以存在多个目标：
+
+- 数量
+- ScriptPublicKey
+
+### UTXO
+
+UTXO, unspent transaction output，代表了比特币当前的总供应量，对验证也有帮助。
+
+### Locktime
+
+Locktime 是一个有延迟的交易。如果一笔交易的 Locktime 是 600，那么这笔交易只能在第 601 个区块上验证。
+
+### 交易费用
+
+比特币的共识算法之一是：对于任何非 Coinbase 交易，输入的总和必须大于等于输出的总和，这样可以激励矿工选择费用更高的交易。没有进入区块的交易被称为：mempool transactions。
