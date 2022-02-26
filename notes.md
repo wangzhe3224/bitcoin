@@ -3,10 +3,10 @@ title: 比特币的技术细节
 tags: Bitcoin
 ---
 
-- [有限域，Finite Field](#有限域finite-field)
-- [椭圆曲线](#椭圆曲线)
+- [1. 有限域，Finite Field](#1-有限域finite-field)
+- [2. 椭圆曲线](#2-椭圆曲线)
   - [点的相加](#点的相加)
-- [椭圆曲线密码学](#椭圆曲线密码学)
+- [3. 椭圆曲线密码学](#3-椭圆曲线密码学)
   - [椭圆曲线的标量乘法](#椭圆曲线的标量乘法)
   - [组，Groups](#组groups)
   - [定义比特币的曲线](#定义比特币的曲线)
@@ -15,22 +15,28 @@ tags: Bitcoin
   - [验证过程](#验证过程)
   - [签名过程](#签名过程)
   - [结论](#结论)
-- [序列化](#序列化)
+- [4. 序列化](#4-序列化)
   - [SEC](#sec)
   - [DER 签名](#der-签名)
   - [Base58](#base58)
   - [WIF 格式](#wif-格式)
   - [如何操作？](#如何操作)
-- [交易, Transaction](#交易-transaction)
+- [5. 交易, Transaction](#5-交易-transaction)
   - [输入](#输入)
   - [输出](#输出)
   - [UTXO](#utxo)
   - [Locktime](#locktime)
   - [交易费用](#交易费用)
+- [6. Script](#6-script)
+- [7. 交易创建和验证](#7-交易创建和验证)
+- [8. Pay-to-Script Hash](#8-pay-to-script-hash)
+- [9. 区块，Blocks](#9-区块blocks)
 
 比特币的核心是椭圆曲线加密技术，而明白这个加密技术，我们需要两个数学知识：有限域 和 椭圆曲线。
 
-## 有限域，Finite Field
+1 - 8 章主要针对单个交易，9章开始，进入区块，即多个交易。
+
+## 1. 有限域，Finite Field
 
 有限域听起来很可怕，但是其实他是一种很简单的代数系统，不会比我们初中学过的基础代数更困难。（当然，我不是数学家，我相信有限域可以非常复杂，只不过对于我们理解比特币，一点点粗浅的理解就够了）
 
@@ -48,7 +54,7 @@ tags: Bitcoin
 
 让一个整数有限域满足闭合条件，我们需要模算术（Modulo Arithmetic），即 `7 % 3 = 1` 这样的计算。详细定义见 Python 代码 `ecc.py`。
 
-## 椭圆曲线
+## 2. 椭圆曲线
 
 椭圆曲线定义如下：$y^2 = x^3 + ax + b$
 
@@ -71,7 +77,7 @@ tags: Bitcoin
 
 详细定义见 Python 代码 `ecc.py`。
 
-## 椭圆曲线密码学
+## 3. 椭圆曲线密码学
 
 正如我们上一小节看到的，椭圆曲线可以定在实数域，当然我们也可以定义在有限域中！只不过他们看起来已经不是曲线或者直线了。
 
@@ -216,7 +222,7 @@ $$\mu G + vP = kG = (r, y)$$
 
 现在我们已经介绍了椭圆曲线密码学，以及如何签名和验证，下一步我们需要通过序列化和反序列化在网络上传输这些信息，在硬盘上存储这些信息。
 
-## 序列化
+## 4. 序列化
 
 我们已经有了一些比特币的基本 Class，比如 `PrivateKey`, `S256Point`, `Signature`。我们需要高效在网络和硬盘上传输和存储这些数据。
 
@@ -286,7 +292,7 @@ priv = PrivateKey(sec)
 address = priv.point.address(testnet=True)
 ```
 
-## 交易, Transaction
+## 5. 交易, Transaction
 
 Transaction, Tx, 是比特币的核心，主要包括四个部分：
 
@@ -331,3 +337,22 @@ Locktime 是一个有延迟的交易。如果一笔交易的 Locktime 是 600，
 ### 交易费用
 
 比特币的共识算法之一是：对于任何非 Coinbase 交易，输入的总和必须大于等于输出的总和，这样可以激励矿工选择费用更高的交易。没有进入区块的交易被称为：mempool transactions。
+
+## 6. Script
+
+一种基于栈的图灵不完备语言。连接前一笔交易 ScriptPubKey 和 当前的 ScriptSig。
+
+## 7. 交易创建和验证
+
+对于一个节点，当它收到一笔交易，他需要验证这笔交易是不是符合比特币协议，这个过程就叫做**验证**：
+
+- 输入没有被消费过(防止 double spending)
+- 输入之和大于输出之和
+- ScriptSig 可以解锁 ScriptPubKey
+
+The Value Overflow Incident - CVE-2010-5139
+
+## 8. Pay-to-Script Hash
+
+## 9. 区块，Blocks
+
